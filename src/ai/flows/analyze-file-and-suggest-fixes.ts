@@ -1,15 +1,14 @@
 'use server';
 
 /**
- * @fileOverview Analyzes a content file based on XML rules and suggests fixes.
+ * @fileOverview Analyzes a content file based on XML rules and suggests fixes by calling an external API.
  *
  * - analyzeFileAndSuggestFixes - A function that handles the analysis and suggestion process.
  * - AnalyzeFileAndSuggestFixesInput - The input type for the analyzeFileAndSuggestFixes function.
  * - AnalyzeFileAndSuggestFixesOutput - The return type for the analyzeFileAndSuggestFixes function.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { z } from 'zod';
 
 const AnalyzeFileAndSuggestFixesInputSchema = z.object({
   contentFile: z.string().describe('The content of the file to analyze.'),
@@ -29,46 +28,41 @@ export type AnalyzeFileAndSuggestFixesOutput = z.infer<
   typeof AnalyzeFileAndSuggestFixesOutputSchema
 >;
 
+const EXTERNAL_API_URL = 'https://algotrading-1-dluo.onrender.com/analyze';
+
 export async function analyzeFileAndSuggestFixes(
   input: AnalyzeFileAndSuggestFixesInput
 ): Promise<AnalyzeFileAndSuggestFixesOutput> {
-  return analyzeFileAndSuggestFixesFlow(input);
-}
+  try {
+    const response = await fetch(EXTERNAL_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        xml_rules: input.xmlRules,
+        txt_content: input.contentFile,
+      }),
+    });
 
-const analyzeFileAndSuggestFixesPrompt = ai.definePrompt({
-  name: 'analyzeFileAndSuggestFixesPrompt',
-  input: {schema: AnalyzeFileAndSuggestFixesInputSchema},
-  output: {schema: AnalyzeFileAndSuggestFixesOutputSchema},
-  prompt: `You are an AI expert in analyzing files based on XML rules.
+    if (!response.ok) {
+      throw new Error(`API request failed with status ${response.status}`);
+    }
 
-  Analyze the following content file based on the provided XML rules.
-  Identify any issues and suggest fixes.
-  Generate a report summarizing the analysis and suggestions.
+    const result = await response.json();
+    
+    // Assuming the API returns a structure that can be mapped to our output schema.
+    // We may need to adjust this mapping based on the actual API response.
+    const output: AnalyzeFileAndSuggestFixesOutput = {
+      analysis: result.analysis || 'No analysis provided.',
+      suggestions: result.suggestions || 'No suggestions provided.',
+      report: result.report || `Analysis Report:\n\nAnalysis:\n${result.analysis}\n\nSuggestions:\n${result.suggestions}`,
+    };
 
-  Content File:
-  {{contentFile}}
+    return AnalyzeFileAndSuggestFixesOutputSchema.parse(output);
 
-  XML Rules:
-  {{xmlRules}}
-
-  Analysis:
-  {{analysis}}
-
-  Suggestions:
-  {{suggestions}}
-
-  Report:
-  {{report}}`,
-});
-
-const analyzeFileAndSuggestFixesFlow = ai.defineFlow(
-  {
-    name: 'analyzeFileAndSuggestFixesFlow',
-    inputSchema: AnalyzeFileAndSuggestFixesInputSchema,
-    outputSchema: AnalyzeFileAndSuggestFixesOutputSchema,
-  },
-  async input => {
-    const {output} = await analyzeFileAndSuggestFixesPrompt(input);
-    return output!;
+  } catch (error) {
+    console.error("Error calling external analysis API:", error);
+    throw new Error("Failed to analyze files using the external service.");
   }
-);
+}

@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Send, Bot, User, FileDown } from 'lucide-react';
+import { Loader2, Send } from 'lucide-react';
 import { ChatHeader } from '@/components/ChatHeader';
 import { ChatMessage } from '@/components/ChatMessage';
 import { Card, CardContent } from '@/components/ui/card';
@@ -99,6 +99,8 @@ export default function ChatPage() {
     setIsAiResponding(true);
 
     try {
+      // Note: chatAboutFileAnalysis is still using the local AI.
+      // We can change this as well if the external API supports a chat endpoint.
       const response = await chatAboutFileAnalysis({
         question: input,
         analysisResult: JSON.stringify(analysisResult),
@@ -136,7 +138,7 @@ export default function ChatPage() {
                 {isAnalyzing ? (
                   <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-8">
                     <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-                    <p className="text-lg font-semibold font-headline">Analyzing your files...</p>
+                    <p className="text-lg font-semibold font-headline">Analyzing your files via external API...</p>
                     <p>The AI is reviewing your XML rules and TXT content.</p>
                   </div>
                 ) : (
@@ -144,9 +146,6 @@ export default function ChatPage() {
                 )}
                 {isAiResponding && (
                    <div className="flex items-start gap-4">
-                     <div className="flex-shrink-0 size-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
-                       <Bot className="size-6" />
-                     </div>
                      <div className="p-3 rounded-lg bg-card flex items-center space-x-2">
                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                        <span className="text-sm text-muted-foreground">AI is typing...</span>
