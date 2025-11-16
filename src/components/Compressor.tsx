@@ -130,9 +130,8 @@ export function Compressor() {
                     clearInterval(interval);
                     const compressedSize = f.originalSize * (Math.random() * 0.5 + 0.2); // Simulate 50-80% reduction
                     // In a real app, the compressed file blob would come from the backend/worker
-                    const isImage = f.file.type.startsWith('image/');
-                    // For demo, we just reuse the original URL.
-                    const compressedUrl = isImage ? f.originalUrl : null;
+                    // For demo, we just reuse the original file blob to create a new URL.
+                    const compressedUrl = URL.createObjectURL(f.file);
 
                     return {
                         ...f, 
@@ -170,9 +169,14 @@ export function Compressor() {
 
   const downloadCompressedFile = (fileId: string) => {
     const file = files.find(f => f.id === fileId);
-    if (file) {
+    if (file && file.compressedUrl) {
+        const link = document.createElement('a');
+        link.href = file.compressedUrl;
+        link.setAttribute('download', `compressed-${file.file.name}`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
         toast({ title: `Downloading ${file.file.name}`});
-        console.log(`Downloading ${fileId}`);
     }
   }
 
@@ -226,7 +230,7 @@ export function Compressor() {
         }
       });
     };
-  }, [files]);
+  }, []); // Remove files from dependencies to avoid revoking URLs on every state change
   
   const totalOriginalSize = files.reduce((acc, f) => acc + f.originalSize, 0);
   const totalCompressedSize = files.reduce((acc, f) => acc + (f.compressedSize ?? 0), 0);
@@ -298,7 +302,7 @@ export function Compressor() {
           </div>
 
           {/* Right Panel: File List & Output */}
-          <div className="lg:col-span-2 min-h-[30rem] bg-muted/30 rounded-lg p-4">
+          <div className="lg:col-span-2 min-h-[30rem] bg-muted/30 rounded-lg p-4 flex flex-col">
             {files.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                     <ImageIcon className="h-16 w-16 mb-4" />
@@ -333,7 +337,7 @@ export function Compressor() {
                                     {f.status === 'compressing' && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
                                     {f.status === 'done' && (
                                         <>
-                                            <Button size="sm" variant="outline" onClick={() => setPreviewFile(f)}><Eye className="h-4 w-4 mr-2"/> Preview</Button>
+                                            {f.file.type.startsWith('image/') && <Button size="sm" variant="outline" onClick={() => setPreviewFile(f)}><Eye className="h-4 w-4 mr-2"/> Preview</Button>}
                                             <Button size="sm" onClick={() => downloadCompressedFile(f.id)}><Download className="h-4 w-4 mr-2"/> Download</Button>
                                         </>
                                     )}
