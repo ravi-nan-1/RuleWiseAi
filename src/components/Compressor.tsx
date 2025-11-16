@@ -1,8 +1,16 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { 
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
 import { 
   FileUp, 
   Loader2, 
@@ -16,14 +24,13 @@ import {
   Gem,
   Sparkles,
   Zap,
-  Languages
+  Languages,
+  Eye
 } from 'lucide-react';
+import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Progress } from './ui/progress';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
-import { Label } from './ui/label';
-import { Switch } from './ui/switch';
 import { 
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +48,8 @@ type UploadedFile = {
   originalSize: number;
   compressedSize: number | null;
   status: 'pending' | 'compressing' | 'done' | 'error';
+  originalUrl: string;
+  compressedUrl: string | null;
 };
 
 const languages = [
@@ -59,6 +68,15 @@ const getFileIcon = (fileType: string) => {
     return <FileIcon className="h-8 w-8 text-gray-500" />;
 };
 
+const formatBytes = (bytes: number, decimals = 2) => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
 
 export function Compressor() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
@@ -66,6 +84,7 @@ export function Compressor() {
   const [isDragging, setIsDragging] = useState(false);
   const [compressionMode, setCompressionMode] = useState<'lossless' | 'quality' | 'max'>('quality');
   const [currentLanguage, setCurrentLanguage] = useState('en');
+  const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
   const { toast } = useToast();
 
   const handleFileUpload = (selectedFiles: FileList | null) => {
@@ -78,18 +97,25 @@ export function Compressor() {
       originalSize: file.size,
       compressedSize: null,
       status: 'pending',
+      originalUrl: URL.createObjectURL(file),
+      compressedUrl: null,
     }));
     
     setFiles(prev => [...prev, ...newFiles]);
   };
 
   const removeFile = (id: string) => {
+    const fileToRemove = files.find(f => f.id === id);
+    if (fileToRemove) {
+      URL.revokeObjectURL(fileToRemove.originalUrl);
+      if (fileToRemove.compressedUrl) {
+        URL.revokeObjectURL(fileToRemove.compressedUrl);
+      }
+    }
     setFiles(prev => prev.filter(f => f.id !== id));
   }
 
   const startCompression = (fileId: string) => {
-    // Placeholder for single file compression logic
-    console.log(`Starting compression for ${fileId} with mode: ${compressionMode}`);
     const fileIndex = files.findIndex(f => f.id === fileId);
     if(fileIndex === -1) return;
 
@@ -98,15 +124,22 @@ export function Compressor() {
     // Simulate compression
     const interval = setInterval(() => {
         setFiles(prev => prev.map(f => {
-            if (f.id === fileId) {
+            if (f.id === fileId && f.status === 'compressing') {
                 const newProgress = f.progress + 10;
                 if (newProgress >= 100) {
                     clearInterval(interval);
+                    const compressedSize = f.originalSize * (Math.random() * 0.5 + 0.2); // Simulate 50-80% reduction
+                    // In a real app, the compressed file blob would come from the backend/worker
+                    const isImage = f.file.type.startsWith('image/');
+                    // For demo, we just reuse the original URL.
+                    const compressedUrl = isImage ? f.originalUrl : null;
+
                     return {
                         ...f, 
                         progress: 100, 
                         status: 'done',
-                        compressedSize: f.originalSize * (Math.random() * 0.5 + 0.2) //_ Simulate 50-80% reduction
+                        compressedSize,
+                        compressedUrl,
                     };
                 }
                 return {...f, progress: newProgress};
@@ -129,7 +162,6 @@ export function Compressor() {
       }
     });
 
-    // This is a rough check. A more robust solution would check when all intervals are truly done.
     setTimeout(() => {
         setIsCompressing(false);
         toast({ title: 'Batch Compression Complete', description: 'All files have been processed.'});
@@ -137,7 +169,6 @@ export function Compressor() {
   }
 
   const downloadCompressedFile = (fileId: string) => {
-    // Placeholder for download logic
     const file = files.find(f => f.id === fileId);
     if (file) {
         toast({ title: `Downloading ${file.file.name}`});
@@ -146,7 +177,6 @@ export function Compressor() {
   }
 
   const downloadAllAsZip = () => {
-     // Placeholder for ZIP download logic
     toast({ title: `Downloading all files as a ZIP.`});
     console.log("Downloading all as ZIP");
   }
@@ -186,12 +216,24 @@ export function Compressor() {
       e.dataTransfer.clearData();
     }
   };
+
+  useEffect(() => {
+    return () => {
+      files.forEach(f => {
+        URL.revokeObjectURL(f.originalUrl);
+        if (f.compressedUrl) {
+          URL.revokeObjectURL(f.compressedUrl);
+        }
+      });
+    };
+  }, [files]);
   
   const totalOriginalSize = files.reduce((acc, f) => acc + f.originalSize, 0);
   const totalCompressedSize = files.reduce((acc, f) => acc + (f.compressedSize ?? 0), 0);
   const allDone = files.length > 0 && files.every(f => f.status === 'done');
 
   return (
+    <>
     <Card className="shadow-2xl shadow-primary/10 border-primary/20 rounded-xl overflow-hidden">
       <div className="absolute top-4 right-4 z-10">
         <DropdownMenu>
@@ -273,11 +315,11 @@ export function Compressor() {
                                 <div className="flex-1">
                                     <p className="font-semibold text-sm truncate">{f.file.name}</p>
                                     <p className="text-xs text-muted-foreground">
-                                        {(f.originalSize / 1024 / 1024).toFixed(2)} MB
+                                        {formatBytes(f.originalSize)}
                                         {f.status === 'done' && f.compressedSize && (
                                             <>
                                                 <span className="mx-1">→</span>
-                                                {(f.compressedSize / 1024 / 1024).toFixed(2)} MB
+                                                {formatBytes(f.compressedSize)}
                                                 <span className="text-green-500 font-medium ml-2">
                                                     (-{ (100 - (f.compressedSize/f.originalSize)*100).toFixed(0) }%)
                                                 </span>
@@ -286,10 +328,17 @@ export function Compressor() {
                                     </p>
                                     {f.status === 'compressing' && <Progress value={f.progress} className="h-1 mt-1" />}
                                 </div>
-                                {f.status === 'pending' && <Button size="sm" variant="ghost" onClick={() => startCompression(f.id)}>Compress</Button>}
-                                {f.status === 'compressing' && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
-                                {f.status === 'done' && <Button size="sm" onClick={() => downloadCompressedFile(f.id)}><Download className="h-4 w-4 mr-2"/> Download</Button>}
-                                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => removeFile(f.id)}><X className="h-4 w-4"/></Button>
+                                <div className='flex items-center gap-1'>
+                                    {f.status === 'pending' && <Button size="sm" variant="ghost" onClick={() => startCompression(f.id)}>Compress</Button>}
+                                    {f.status === 'compressing' && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
+                                    {f.status === 'done' && (
+                                        <>
+                                            <Button size="sm" variant="outline" onClick={() => setPreviewFile(f)}><Eye className="h-4 w-4 mr-2"/> Preview</Button>
+                                            <Button size="sm" onClick={() => downloadCompressedFile(f.id)}><Download className="h-4 w-4 mr-2"/> Download</Button>
+                                        </>
+                                    )}
+                                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => removeFile(f.id)}><X className="h-4 w-4"/></Button>
+                                </div>
                             </div>
                         ))}
                         </div>
@@ -299,7 +348,7 @@ export function Compressor() {
                           <div className="text-center mb-4 p-4 bg-green-500/10 rounded-lg">
                               <h4 className="font-bold text-green-700">Compression Complete!</h4>
                               <p className="text-sm text-green-600">
-                                  Total saved: <span className="font-semibold">{(totalOriginalSize / 1024 / 1024).toFixed(2)} MB</span> → <span className="font-semibold">{(totalCompressedSize / 1024 / 1024).toFixed(2)} MB</span>
+                                  Total saved: <span className="font-semibold">{formatBytes(totalOriginalSize)}</span> → <span className="font-semibold">{formatBytes(totalCompressedSize)}</span>
                                   <span className="ml-2 font-bold">({ (100 - (totalCompressedSize/totalOriginalSize)*100).toFixed(0) }%)</span>
                               </p>
                           </div>
@@ -320,5 +369,55 @@ export function Compressor() {
         </div>
       </CardContent>
     </Card>
+
+    {previewFile && (
+      <Dialog open={!!previewFile} onOpenChange={(isOpen) => !isOpen && setPreviewFile(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Compression Preview</DialogTitle>
+            <DialogDescription>{previewFile.file.name}</DialogDescription>
+          </DialogHeader>
+          {previewFile.file.type.startsWith('image/') && previewFile.compressedUrl ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <h3 className="text-center font-semibold mb-2">Original ({formatBytes(previewFile.originalSize)})</h3>
+                <div className="relative aspect-square w-full">
+                  <Image src={previewFile.originalUrl} alt="Original" fill style={{ objectFit: 'contain' }} />
+                </div>
+              </div>
+              <div>
+                <h3 className="text-center font-semibold mb-2">Compressed ({formatBytes(previewFile.compressedSize!)})</h3>
+                <div className="relative aspect-square w-full">
+                  <Image src={previewFile.compressedUrl} alt="Compressed" fill style={{ objectFit: 'contain' }} />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className='space-y-4'>
+                <div className='flex items-center justify-center p-8 bg-muted rounded-lg'>
+                    {getFileIcon(previewFile.file.type)}
+                </div>
+                <div className='grid grid-cols-2 gap-4 text-center'>
+                    <div>
+                        <p className='text-muted-foreground'>Original Size</p>
+                        <p className='text-lg font-semibold'>{formatBytes(previewFile.originalSize)}</p>
+                    </div>
+                    <div>
+                        <p className='text-muted-foreground'>Compressed Size</p>
+                        <p className='text-lg font-semibold'>{formatBytes(previewFile.compressedSize!)}</p>
+                    </div>
+                </div>
+                <div className="text-center p-4 bg-green-500/10 rounded-lg">
+                    <h4 className="font-bold text-green-700">Size Reduction</h4>
+                    <p className="text-2xl text-green-600 font-bold">
+                        { (100 - (previewFile.compressedSize!/previewFile.originalSize)*100).toFixed(0) }%
+                    </p>
+                </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    )}
+    </>
   );
 }
