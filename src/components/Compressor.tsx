@@ -1,0 +1,324 @@
+'use client';
+
+import { useState, useCallback } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { 
+  FileUp, 
+  Loader2, 
+  File as FileIcon, 
+  X, 
+  Image as ImageIcon,
+  FileText,
+  FileArchive,
+  Film,
+  Download,
+  Gem,
+  Sparkles,
+  Zap,
+  Languages
+} from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { Progress } from './ui/progress';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
+import { Label } from './ui/label';
+import { Switch } from './ui/switch';
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from './ui/dropdown-menu';
+
+type UploadedFile = {
+  id: string;
+  file: File;
+  progress: number;
+  originalSize: number;
+  compressedSize: number | null;
+  status: 'pending' | 'compressing' | 'done' | 'error';
+};
+
+const languages = [
+    { code: 'en', name: 'English' }, { code: 'zh', name: 'Chinese' }, { code: 'es', name: 'Spanish' },
+    { code: 'hi', name: 'Hindi' }, { code: 'ar', name: 'Arabic' }, { code: 'fr', name: 'French' },
+    { code: 'bn', name: 'Bengali' }, { code: 'pt', name: 'Portuguese' }, { code: 'ru', name: 'Russian' },
+    { code: 'ur', name: 'Urdu' }
+];
+
+const getFileIcon = (fileType: string) => {
+    if (fileType.startsWith('image/')) return <ImageIcon className="h-8 w-8 text-blue-500" />;
+    if (fileType === 'application/pdf') return <FileText className="h-8 w-8 text-red-500" />;
+    if (fileType.includes('document') || fileType.includes('word')) return <FileText className="h-8 w-8 text-blue-600" />;
+    if (fileType.startsWith('video/')) return <Film className="h-8 w-8 text-purple-500" />;
+    if (fileType.includes('zip') || fileType.includes('rar') || fileType.includes('7z')) return <FileArchive className="h-8 w-8 text-yellow-500" />;
+    return <FileIcon className="h-8 w-8 text-gray-500" />;
+};
+
+
+export function Compressor() {
+  const [files, setFiles] = useState<UploadedFile[]>([]);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [compressionMode, setCompressionMode] = useState<'lossless' | 'quality' | 'max'>('quality');
+  const [currentLanguage, setCurrentLanguage] = useState('en');
+  const { toast } = useToast();
+
+  const handleFileUpload = (selectedFiles: FileList | null) => {
+    if (!selectedFiles) return;
+
+    const newFiles: UploadedFile[] = Array.from(selectedFiles).map(file => ({
+      id: `${file.name}-${file.lastModified}`,
+      file,
+      progress: 0,
+      originalSize: file.size,
+      compressedSize: null,
+      status: 'pending',
+    }));
+    
+    setFiles(prev => [...prev, ...newFiles]);
+  };
+
+  const removeFile = (id: string) => {
+    setFiles(prev => prev.filter(f => f.id !== id));
+  }
+
+  const startCompression = (fileId: string) => {
+    // Placeholder for single file compression logic
+    console.log(`Starting compression for ${fileId} with mode: ${compressionMode}`);
+    const fileIndex = files.findIndex(f => f.id === fileId);
+    if(fileIndex === -1) return;
+
+    setFiles(prev => prev.map(f => f.id === fileId ? {...f, status: 'compressing', progress: 0} : f));
+
+    // Simulate compression
+    const interval = setInterval(() => {
+        setFiles(prev => prev.map(f => {
+            if (f.id === fileId) {
+                const newProgress = f.progress + 10;
+                if (newProgress >= 100) {
+                    clearInterval(interval);
+                    return {
+                        ...f, 
+                        progress: 100, 
+                        status: 'done',
+                        compressedSize: f.originalSize * (Math.random() * 0.5 + 0.2) //_ Simulate 50-80% reduction
+                    };
+                }
+                return {...f, progress: newProgress};
+            }
+            return f;
+        }));
+    }, 200);
+  }
+  
+  const compressAllFiles = () => {
+    if (files.filter(f => f.status === 'pending').length === 0) {
+        toast({ title: 'No files to compress', description: 'All files have already been compressed.', variant: 'destructive' });
+        return;
+    }
+    
+    setIsCompressing(true);
+    files.forEach(file => {
+      if (file.status === 'pending') {
+        startCompression(file.id);
+      }
+    });
+
+    // This is a rough check. A more robust solution would check when all intervals are truly done.
+    setTimeout(() => {
+        setIsCompressing(false);
+        toast({ title: 'Batch Compression Complete', description: 'All files have been processed.'});
+    }, 3000);
+  }
+
+  const downloadCompressedFile = (fileId: string) => {
+    // Placeholder for download logic
+    const file = files.find(f => f.id === fileId);
+    if (file) {
+        toast({ title: `Downloading ${file.file.name}`});
+        console.log(`Downloading ${fileId}`);
+    }
+  }
+
+  const downloadAllAsZip = () => {
+     // Placeholder for ZIP download logic
+    toast({ title: `Downloading all files as a ZIP.`});
+    console.log("Downloading all as ZIP");
+  }
+
+  const changeCompressionMode = (mode: 'lossless' | 'quality' | 'max') => {
+    setCompressionMode(mode);
+  }
+  
+  const changeLanguage = (langCode: string) => {
+    setCurrentLanguage(langCode);
+    toast({ title: `Language changed to ${languages.find(l => l.code === langCode)?.name}` });
+  }
+
+  const handleDragEnter = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileUpload(e.dataTransfer.files);
+      e.dataTransfer.clearData();
+    }
+  };
+  
+  const totalOriginalSize = files.reduce((acc, f) => acc + f.originalSize, 0);
+  const totalCompressedSize = files.reduce((acc, f) => acc + (f.compressedSize ?? 0), 0);
+  const allDone = files.length > 0 && files.every(f => f.status === 'done');
+
+  return (
+    <Card className="shadow-2xl shadow-primary/10 border-primary/20 rounded-xl overflow-hidden">
+      <div className="absolute top-4 right-4 z-10">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm"><Languages className="mr-2" /> {languages.find(l => l.code === currentLanguage)?.name}</Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-48">
+            <DropdownMenuLabel>Select Language</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuRadioGroup value={currentLanguage} onValueChange={changeLanguage}>
+              {languages.map(lang => (
+                 <DropdownMenuRadioItem key={lang.code} value={lang.code}>{lang.name}</DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <CardContent className="p-2 sm:p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Panel: Upload & Options */}
+          <div className="lg:col-span-1 space-y-6">
+              <input
+                type="file"
+                id="file-upload"
+                className="hidden"
+                multiple
+                onChange={(e) => handleFileUpload(e.target.files)}
+              />
+              <label
+                htmlFor="file-upload"
+                className={cn(
+                  'flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors',
+                  isDragging ? 'border-primary bg-primary/10' : 'border-border'
+                )}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+              >
+                <div className="flex flex-col items-center justify-center text-center p-4">
+                  <FileUp className="w-10 h-10 mb-3 text-primary" />
+                  <p className="mb-1 text-md font-semibold text-foreground">
+                    <span className="text-primary">Click to upload</span> or drag and drop
+                  </p>
+                  <p className="text-xs text-muted-foreground">Any file format supported</p>
+                </div>
+              </label>
+
+              <h3 className="text-lg font-semibold text-center">Compression Mode</h3>
+              <div className="grid grid-cols-1 gap-2">
+                  <Button variant={compressionMode === 'lossless' ? 'default' : 'outline'} onClick={() => changeCompressionMode('lossless')} className="justify-start h-auto py-3">
+                    <Gem className="mr-3"/> <div><p>Lossless Compression</p><p className="text-xs text-muted-foreground font-normal">No quality loss.</p></div>
+                  </Button>
+                  <Button variant={compressionMode === 'quality' ? 'default' : 'outline'} onClick={() => changeCompressionMode('quality')} className="justify-start h-auto py-3">
+                    <Sparkles className="mr-3"/> <div><p>High-Quality</p><p className="text-xs text-muted-foreground font-normal">Minimal quality loss.</p></div>
+                  </Button>
+                  <Button variant={compressionMode === 'max' ? 'default' : 'outline'} onClick={() => changeCompressionMode('max')} className="justify-start h-auto py-3">
+                    <Zap className="mr-3"/> <div><p>Maximum Compression</p><p className="text-xs text-muted-foreground font-normal">Highest size reduction.</p></div>
+                  </Button>
+              </div>
+          </div>
+
+          {/* Right Panel: File List & Output */}
+          <div className="lg:col-span-2 min-h-[30rem] bg-muted/30 rounded-lg p-4">
+            {files.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                    <ImageIcon className="h-16 w-16 mb-4" />
+                    <p>Your uploaded files will appear here</p>
+                </div>
+            ) : (
+                <div className="space-y-3 h-full flex flex-col">
+                    <h3 className="text-lg font-semibold">File Queue ({files.length})</h3>
+                    <div className="flex-1 overflow-y-auto pr-2">
+                        <div className="space-y-2">
+                        {files.map(f => (
+                            <div key={f.id} className="bg-background p-3 rounded-lg shadow-sm border flex items-center gap-4">
+                                {getFileIcon(f.file.type)}
+                                <div className="flex-1">
+                                    <p className="font-semibold text-sm truncate">{f.file.name}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        {(f.originalSize / 1024 / 1024).toFixed(2)} MB
+                                        {f.status === 'done' && f.compressedSize && (
+                                            <>
+                                                <span className="mx-1">→</span>
+                                                {(f.compressedSize / 1024 / 1024).toFixed(2)} MB
+                                                <span className="text-green-500 font-medium ml-2">
+                                                    (-{ (100 - (f.compressedSize/f.originalSize)*100).toFixed(0) }%)
+                                                </span>
+                                            </>
+                                        )}
+                                    </p>
+                                    {f.status === 'compressing' && <Progress value={f.progress} className="h-1 mt-1" />}
+                                </div>
+                                {f.status === 'pending' && <Button size="sm" variant="ghost" onClick={() => startCompression(f.id)}>Compress</Button>}
+                                {f.status === 'compressing' && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
+                                {f.status === 'done' && <Button size="sm" onClick={() => downloadCompressedFile(f.id)}><Download className="h-4 w-4 mr-2"/> Download</Button>}
+                                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => removeFile(f.id)}><X className="h-4 w-4"/></Button>
+                            </div>
+                        ))}
+                        </div>
+                    </div>
+                    <div className="mt-auto pt-4 border-t">
+                      {allDone && totalCompressedSize > 0 && (
+                          <div className="text-center mb-4 p-4 bg-green-500/10 rounded-lg">
+                              <h4 className="font-bold text-green-700">Compression Complete!</h4>
+                              <p className="text-sm text-green-600">
+                                  Total saved: <span className="font-semibold">{(totalOriginalSize / 1024 / 1024).toFixed(2)} MB</span> → <span className="font-semibold">{(totalCompressedSize / 1024 / 1024).toFixed(2)} MB</span>
+                                  <span className="ml-2 font-bold">({ (100 - (totalCompressedSize/totalOriginalSize)*100).toFixed(0) }%)</span>
+                              </p>
+                          </div>
+                      )}
+                      <div className="flex gap-2">
+                        <Button size="lg" className="flex-1" onClick={compressAllFiles} disabled={isCompressing || files.length === 0}>
+                            {isCompressing ? <Loader2 className="animate-spin mr-2" /> : <Zap className="mr-2" />}
+                            Compress All ({files.filter(f => f.status === 'pending').length})
+                        </Button>
+                        <Button size="lg" className="flex-1" variant="outline" onClick={downloadAllAsZip} disabled={!allDone}>
+                            <Download className="mr-2"/> Download All as ZIP
+                        </Button>
+                      </div>
+                    </div>
+                </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
