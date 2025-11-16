@@ -8,7 +8,7 @@ export function Logo() {
         <FileCheck2 className="size-6" />
       </div>
       <span className="font-headline text-2xl font-bold text-primary">
-        RuleWise AI
+        FileCompressor
       </span>
     </Link>
   );
