@@ -98,12 +98,12 @@ const relatedTools = [
     link: 'https://imagetools.all2ools.com',
   },
   {
-    title: 'Image Compressor',
-    description: 'Reduce image file sizes for free.',
-    link: '#',
+    title: 'PDF2Word',
+    description: 'Convert PDF to Word for free.',
+    link: 'https://pdf2word.all2ools.com',
   },
   {
-    title: 'More PDF Tools',
+    title: 'Image Compressor',
     description: 'Explore our full suite of online tools.',
     link: '#',
   },
