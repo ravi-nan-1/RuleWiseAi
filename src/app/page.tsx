@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Card } from "@/components/ui/card";
+import Link from "next/link";
 
 const features = [
   { icon: Layers3, title: "Lossless Compression", description: "Reduce file size with zero quality loss for perfect clarity." },
@@ -116,6 +117,10 @@ export default function Home() {
       <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
           <Logo />
+          <Link href="https://all2ools.com" target="_blank" rel="noopener noreferrer" className="font-semibold text-primary hover:underline flex items-center gap-1">
+            All2ools.com
+            <ExternalLink className="h-4 w-4" />
+          </Link>
         </div>
       </header>
 
@@ -289,7 +294,7 @@ export default function Home() {
 
       <footer className="py-8 bg-background border-t">
         <div className="container max-w-7xl mx-auto text-center text-muted-foreground">
-          <p>&copy; {new Date().getFullYear()} PDF2Word. A part of <a href="http://All2ools.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">All2ools.com</a></p>
+          <p>&copy; {new Date().getFullYear()} PDF2Word. A part of <a href="https://all2ools.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">All2ools.com</a></p>
         </div>
       </footer>
     </div>
