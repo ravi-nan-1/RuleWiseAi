@@ -20,9 +20,11 @@ import {
   UploadCloud,
   Layers3,
   Search,
-  Download
+  Download,
+  ExternalLink
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { Card } from "@/components/ui/card";
 
 const features = [
   { icon: Layers3, title: "Lossless Compression", description: "Reduce file size with zero quality loss for perfect clarity." },
@@ -89,6 +91,24 @@ const faqItems = [
     }
 ];
 
+const relatedTools = [
+  {
+    title: 'PDF Splitter',
+    description: 'Split your PDF files into multiple documents.',
+    link: '#',
+  },
+  {
+    title: 'Image Compressor',
+    description: 'Reduce image file sizes for free.',
+    link: '#',
+  },
+  {
+    title: 'More PDF Tools',
+    description: 'Explore our full suite of online tools.',
+    link: '#',
+  },
+];
+
 
 export default function Home() {
   return (
@@ -132,7 +152,7 @@ export default function Home() {
             <p>At its core, compression is about making files smaller. The distinction between 'lossy' and 'lossless' is crucial. While lossy compression can reduce quality, our online file compressor champions <strong className="text-primary">lossless file compression</strong>. This advanced technique allows you to reduce file size without losing quality, which is critical for professionals who need to compress images online or compress documents online with perfect fidelity.</p>
             <p>Whether you need to <strong className="font-semibold">compress PDF online</strong> for an email attachment, or <strong className="font-semibold">compress a ZIP file online free</strong> for faster sharing, our tool is the solution. It's the best file compressor online because it's fast, free, and secure.</p>
             <p>Many users find our tool invaluable after using a <strong className="font-semibold">PDF to Word online free</strong> service. When you <strong className="font-semibold">convert PDF to DOCX online</strong>, the resulting file can sometimes be larger than the original. Our tool is the <strong className="font-semibold">best PDF to Word converter</strong> companion, allowing you to shrink that DOCX file back down. This is especially useful when dealing with a <strong className="font-semibold">convert large PDF to Word</strong> task, as it makes the document easier to email and <strong className="font-semibold">edit PDF in Word</strong> without performance issues.</p>
-            <p>The benefits are immediate. Compressed files upload and download faster. They bypass restrictive email attachment limits. For web developers, using our tool to reduce image size (JPG/PNG/WebP) leads to faster websites, improving user experience and SEO. By using our tool, you're not just saving space; you're making your digital life more efficient.</p>
+            <p>The benefits are immediate. Compressed files upload and download faster. They bypass restrictive email attachment limits. For web developers, using our tool to reduce image size (jpg/png/webp) leads to faster websites, improving user experience and SEO. By using our tool, you're not just saving space; you're making your digital life more efficient.</p>
           </div>
         </section>
 
@@ -236,15 +256,42 @@ export default function Home() {
             </Accordion>
           </div>
         </section>
+        
+        {/* Related Tools Section */}
+        <section className="py-12 md:py-20">
+          <div className="container max-w-5xl mx-auto px-4">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold font-headline">Related Tools</h2>
+              <p className="text-muted-foreground mt-2">To improve productivity, try our other free tools:</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {relatedTools.map((tool, index) => (
+                <a
+                  key={index}
+                  href={tool.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block group"
+                >
+                  <Card className="p-6 h-full transition-all duration-300 group-hover:shadow-lg group-hover:-translate-y-1 border-border/80 group-hover:border-primary/50">
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="text-xl font-bold text-foreground">{tool.title}</h3>
+                      <ExternalLink className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-primary" />
+                    </div>
+                    <p className="text-muted-foreground">{tool.description}</p>
+                  </Card>
+                </a>
+              ))}
+            </div>
+          </div>
+        </section>
       </main>
 
       <footer className="py-8 bg-background border-t">
         <div className="container max-w-7xl mx-auto text-center text-muted-foreground">
-          <p>&copy; {new Date().getFullYear()} Universal File Compressor. All Rights Reserved.</p>
+          <p>&copy; {new Date().getFullYear()} PDF2Word. A part of All2ools.com</p>
         </div>
       </footer>
     </div>
   );
 }
-
-    
