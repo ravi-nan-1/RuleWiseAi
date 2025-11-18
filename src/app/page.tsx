@@ -103,9 +103,9 @@ const relatedTools = [
     link: 'https://pdf2word.all2ools.com',
   },
   {
-    title: 'Image Compressor',
+    title: 'More Exciting Tools',
     description: 'Explore our full suite of online tools.',
-    link: '#',
+    link: 'https://all2ools.com',
   },
 ];
 
