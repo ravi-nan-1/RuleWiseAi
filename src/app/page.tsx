@@ -95,7 +95,7 @@ const relatedTools = [
   {
     title: 'PDF Splitter',
     description: 'Split your PDF files into multiple documents.',
-    link: '#',
+    link: 'https://imagetools.all2ools.com',
   },
   {
     title: 'Image Compressor',
