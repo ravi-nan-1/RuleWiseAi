@@ -289,7 +289,7 @@ export default function Home() {
 
       <footer className="py-8 bg-background border-t">
         <div className="container max-w-7xl mx-auto text-center text-muted-foreground">
-          <p>&copy; {new Date().getFullYear()} PDF2Word. A part of All2ools.com</p>
+          <p>&copy; {new Date().getFullYear()} PDF2Word. A part of <a href="http://All2ools.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">All2ools.com</a></p>
         </div>
       </footer>
     </div>
