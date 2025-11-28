@@ -119,72 +119,83 @@ export function Compressor() {
     setFiles(prev => prev.filter(f => f.id !== id));
   }
 
-  const startCompression = (fileId: string) => {
+  const startCompression = async (fileId: string) => {
     const fileIndex = files.findIndex(f => f.id === fileId);
     if(fileIndex === -1) return;
 
-    setFiles(prev => prev.map(f => f.id === fileId ? {...f, status: 'compressing', progress: 0} : f));
+    const fileToCompress = files[fileIndex];
+    setFiles(prev => prev.map(f => f.id === fileId ? {...f, status: 'compressing', progress: 25} : f));
 
-    // Simulate compression
-    const interval = setInterval(() => {
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(fileToCompress.file);
+      reader.onload = async (event) => {
+        const base64Content = (event.target?.result as string).split(',')[1];
+        
+        setFiles(prev => prev.map(f => f.id === fileId ? {...f, progress: 50} : f));
+
+        const response = await fetch('/api/genkit/compressFileFlow', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            input: {
+              fileContent: base64Content,
+              fileName: fileToCompress.file.name,
+              compressionMode,
+              advancedOptions: compressionMode === 'advanced' ? advancedOptions : undefined,
+            }
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Compression API failed');
+        }
+
+        setFiles(prev => prev.map(f => f.id === fileId ? {...f, progress: 75} : f));
+
+        const result = await response.json();
+        const compressedContent = result.output.compressedContent;
+        const compressedSize = result.output.compressedSize;
+
+        const compressedBlob = await (await fetch(`data:${fileToCompress.file.type};base64,${compressedContent}`)).blob();
+        const compressedUrl = URL.createObjectURL(compressedBlob);
+
         setFiles(prev => prev.map(f => {
-            if (f.id === fileId && f.status === 'compressing') {
-                const newProgress = f.progress + 10;
-                if (newProgress >= 100) {
-                    clearInterval(interval);
-                    
-                    let compressedSize = 0;
-                    if (compressionMode === 'advanced') {
-                        const targetBytes = advancedOptions.unit === 'KB' ? advancedOptions.size * 1024 : advancedOptions.size * 1024 * 1024;
-                        if (targetBytes < f.originalSize) {
-                          compressedSize = targetBytes;
-                        } else {
-                          // Target is larger than original, do minimal compression
-                          compressedSize = f.originalSize * 0.9;
-                        }
-                    } else {
-                      let reductionFactor = Math.random() * 0.5 + 0.2; // Default 50-80% reduction
-                      if (compressionMode === 'lossless') reductionFactor = Math.random() * 0.2 + 0.1; // 10-30%
-                      if (compressionMode === 'max') reductionFactor = Math.random() * 0.3 + 0.6; // 60-90%
-                      compressedSize = f.originalSize * (1 - reductionFactor);
-                    }
-                    
-                    // In a real app, the compressed file blob would come from the backend/worker
-                    const compressedBlob = new Blob([f.file], { type: f.file.type });
-                    const compressedUrl = URL.createObjectURL(compressedBlob);
-
-                    return {
-                        ...f, 
-                        progress: 100, 
-                        status: 'done',
-                        compressedSize,
-                        compressedUrl,
-                    };
-                }
-                return {...f, progress: newProgress};
+            if (f.id === fileId) {
+                return {
+                    ...f, 
+                    progress: 100, 
+                    status: 'done',
+                    compressedSize,
+                    compressedUrl,
+                };
             }
             return f;
         }));
-    }, 200);
+      };
+      reader.onerror = (error) => {
+        throw error;
+      };
+    } catch(e) {
+        console.error(e);
+        toast({ title: 'Compression Failed', description: 'Something went wrong while compressing the file.', variant: 'destructive'});
+        setFiles(prev => prev.map(f => f.id === fileId ? {...f, status: 'error'} : f));
+    }
   }
   
-  const compressAllFiles = () => {
-    if (files.filter(f => f.status === 'pending').length === 0) {
-        toast({ title: 'No files to compress', description: 'All files have already been compressed.', variant: 'destructive' });
+  const compressAllFiles = async () => {
+    const pendingFiles = files.filter(f => f.status === 'pending');
+    if (pendingFiles.length === 0) {
+        toast({ title: 'No files to compress', description: 'All files have already been processed.', variant: 'destructive' });
         return;
     }
     
     setIsCompressing(true);
-    files.forEach(file => {
-      if (file.status === 'pending') {
-        startCompression(file.id);
-      }
-    });
-
-    setTimeout(() => {
-        setIsCompressing(false);
-        toast({ title: 'Batch Compression Complete', description: 'All files have been processed.'});
-    }, 3000);
+    await Promise.all(pendingFiles.map(file => startCompression(file.id)));
+    setIsCompressing(false);
+    toast({ title: 'Batch Compression Complete', description: 'All files have been processed.'});
   }
 
   const downloadCompressedFile = (fileId: string) => {
@@ -202,7 +213,7 @@ export function Compressor() {
 
   const downloadAllAsZip = () => {
     toast({ title: `Downloading all files as a ZIP.`});
-    console.log("Downloading all as ZIP");
+    console.log("Downloading all as ZIP - functionality not implemented yet.");
   }
 
   const changeCompressionMode = (mode: 'lossless' | 'quality' | 'max' | 'advanced') => {
@@ -370,7 +381,7 @@ export function Compressor() {
                                     <p className="font-semibold text-sm truncate">{f.file.name}</p>
                                     <p className="text-xs text-muted-foreground">
                                         {formatBytes(f.originalSize)}
-                                        {f.status === 'done' && f.compressedSize && (
+                                        {f.status === 'done' && f.compressedSize !== null && (
                                             <>
                                                 <span className="mx-1">→</span>
                                                 {formatBytes(f.compressedSize)}
@@ -380,7 +391,7 @@ export function Compressor() {
                                             </>
                                         )}
                                     </p>
-                                    {f.status === 'compressing' && <Progress value={f.progress} className="h-1 mt-1" />}
+                                    {(f.status === 'compressing' || f.status === 'pending') && <Progress value={f.progress} className="h-1 mt-1" />}
                                 </div>
                                 <div className='flex items-center gap-1'>
                                     {f.status === 'pending' && <Button size="sm" variant="ghost" onClick={() => startCompression(f.id)}>Compress</Button>}
