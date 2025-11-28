@@ -25,7 +25,8 @@ import {
   Sparkles,
   Zap,
   Languages,
-  Eye
+  Eye,
+  Settings
 } from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
@@ -40,6 +41,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from './ui/dropdown-menu';
+import { Input } from './ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 type UploadedFile = {
   id: string;
@@ -82,7 +85,8 @@ export function Compressor() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isCompressing, setIsCompressing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [compressionMode, setCompressionMode] = useState<'lossless' | 'quality' | 'max'>('quality');
+  const [compressionMode, setCompressionMode] = useState<'lossless' | 'quality' | 'max' | 'advanced'>('quality');
+  const [advancedOptions, setAdvancedOptions] = useState({ size: 20, unit: 'KB' });
   const [currentLanguage, setCurrentLanguage] = useState('en');
   const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
   const { toast } = useToast();
@@ -128,10 +132,25 @@ export function Compressor() {
                 const newProgress = f.progress + 10;
                 if (newProgress >= 100) {
                     clearInterval(interval);
-                    const compressedSize = f.originalSize * (Math.random() * 0.5 + 0.2); // Simulate 50-80% reduction
+                    
+                    let reductionFactor = Math.random() * 0.5 + 0.2; // Default 50-80% reduction
+                    if (compressionMode === 'lossless') reductionFactor = Math.random() * 0.2 + 0.1; // 10-30%
+                    if (compressionMode === 'max') reductionFactor = Math.random() * 0.3 + 0.6; // 60-90%
+                    if (compressionMode === 'advanced') {
+                        const targetBytes = advancedOptions.unit === 'KB' ? advancedOptions.size * 1024 : advancedOptions.size * 1024 * 1024;
+                        if (targetBytes < f.originalSize) {
+                          reductionFactor = targetBytes / f.originalSize;
+                        } else {
+                          // Target is larger than original, do minimal compression
+                          reductionFactor = 0.9;
+                        }
+                    }
+
+                    const compressedSize = f.originalSize * (1 - reductionFactor);
+                    
                     // In a real app, the compressed file blob would come from the backend/worker
-                    // For demo, we just reuse the original file blob to create a new URL.
-                    const compressedUrl = URL.createObjectURL(f.file);
+                    const compressedBlob = new Blob([f.file], { type: f.file.type });
+                    const compressedUrl = URL.createObjectURL(compressedBlob);
 
                     return {
                         ...f, 
@@ -185,7 +204,7 @@ export function Compressor() {
     console.log("Downloading all as ZIP");
   }
 
-  const changeCompressionMode = (mode: 'lossless' | 'quality' | 'max') => {
+  const changeCompressionMode = (mode: 'lossless' | 'quality' | 'max' | 'advanced') => {
     setCompressionMode(mode);
   }
   
@@ -298,7 +317,37 @@ export function Compressor() {
                   <Button variant={compressionMode === 'max' ? 'default' : 'outline'} onClick={() => changeCompressionMode('max')} className="justify-start h-auto py-3">
                     <Zap className="mr-3"/> <div><p>Maximum Compression</p><p className="text-xs text-muted-foreground font-normal">Highest size reduction.</p></div>
                   </Button>
+                  <Button variant={compressionMode === 'advanced' ? 'default' : 'outline'} onClick={() => changeCompressionMode('advanced')} className="justify-start h-auto py-3">
+                    <Settings className="mr-3"/> <div><p>Advanced</p><p className="text-xs text-muted-foreground font-normal">Set a target file size.</p></div>
+                  </Button>
               </div>
+              
+              {compressionMode === 'advanced' && (
+                <div className="space-y-2 p-4 border rounded-lg bg-muted/50">
+                  <label htmlFor="target-size" className="text-sm font-medium">Target Size</label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="target-size"
+                      type="number"
+                      value={advancedOptions.size}
+                      onChange={(e) => setAdvancedOptions(prev => ({...prev, size: parseInt(e.target.value, 10) || 0}))}
+                      className="w-full"
+                    />
+                    <Select
+                      value={advancedOptions.unit}
+                      onValueChange={(value: 'KB' | 'MB') => setAdvancedOptions(prev => ({...prev, unit: value}))}
+                    >
+                      <SelectTrigger className="w-[80px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="KB">KB</SelectItem>
+                        <SelectItem value="MB">MB</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
           </div>
 
           {/* Right Panel: File List & Output */}
