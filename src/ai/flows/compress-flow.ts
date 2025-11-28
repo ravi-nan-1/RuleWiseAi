@@ -47,33 +47,37 @@ export const compressFileFlow = ai.defineFlow(
   },
   async (input) => {
     const buffer = Buffer.from(input.fileContent, 'base64');
-
-    // NOTE: This is a very basic simulation for demonstration.
-    // Real-world implementation would require different libraries for different file types.
-    // For now, we'll use gzip for a simple text-based compression example.
-
     let compressedBuffer: Buffer;
 
     try {
-      // We will use gzip as a simple, universal compression example.
-      // More advanced logic would be needed here for specific file types and modes.
-      const compressionLevel =
-        input.compressionMode === 'max'
-          ? zlib.constants.Z_BEST_COMPRESSION
-          : zlib.constants.Z_DEFAULT_COMPRESSION;
+      let compressionLevel: number;
+
+      switch (input.compressionMode) {
+        case 'lossless':
+          compressionLevel = zlib.constants.Z_BEST_SPEED; // Good for speed, less compression
+          break;
+        case 'quality':
+          compressionLevel = zlib.constants.Z_DEFAULT_COMPRESSION; // Balanced
+          break;
+        case 'max':
+          compressionLevel = zlib.constants.Z_BEST_COMPRESSION; // Max compression
+          break;
+        case 'advanced':
+          // For 'advanced' mode, a true implementation would need an iterative process
+          // to meet the target size, which is complex. For this example, we'll use
+          // maximum compression as a stand-in.
+          compressionLevel = zlib.constants.Z_BEST_COMPRESSION;
+          break;
+        default:
+          compressionLevel = zlib.constants.Z_DEFAULT_COMPRESSION;
+      }
+
       compressedBuffer = await gzip(buffer, { level: compressionLevel });
 
-      // For 'advanced' mode, we'd need a more complex, iterative process
-      // to meet the target size, which is beyond this basic example.
-      // For now, we just use the 'max' compression.
-      if (input.compressionMode === 'advanced') {
-        compressedBuffer = await gzip(buffer, {
-          level: zlib.constants.Z_BEST_COMPRESSION,
-        });
-      }
     } catch (error) {
       console.error('Compression failed:', error);
-      // If compression fails, return original content
+      // If compression fails for any reason, we will return the original, uncompressed content
+      // to avoid breaking the user's flow.
       compressedBuffer = buffer;
     }
 
