@@ -99,32 +99,35 @@ const compressImageClientSide = (file: File, mode: 'lossless' | 'quality' | 'max
         let quality: number;
         switch(mode) {
           case 'lossless':
-            quality = 0.95; // Near lossless
+            quality = 0.95; // Near lossless for jpeg, png is handled separately
             break;
           case 'max':
-            quality = 0.6; // Max compression
+            quality = 0.6; // Max compression for jpeg
             break;
-          case 'advanced':
-            // This is a simplification. True target size requires iteration.
+          case 'advanced': {
             const targetBytes = advancedOptions.size * (advancedOptions.unit === 'MB' ? 1024 * 1024 : 1024);
             quality = Math.max(0.5, Math.min(0.95, 1 - (file.size - targetBytes) / file.size));
             break;
+          }
           case 'quality':
           default:
-            quality = 0.8; // Good quality
+            quality = 0.8; // Good quality for jpeg
             break;
         }
 
+        // For PNG, canvas.toBlob is lossless by default. For other modes, we convert to JPEG.
+        const outputMimeType = mode === 'lossless' && file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        
         canvas.toBlob(blob => {
           if (!blob) return reject(new Error('Canvas toBlob failed'));
           
+          // If compression made it bigger (unlikely but possible), return original
           if (blob.size > file.size) {
-            // If compression made it bigger, return original
             resolve(file);
           } else {
             resolve(blob);
           }
-        }, 'image/jpeg', quality);
+        }, outputMimeType, quality);
       };
       img.onerror = reject;
     };
@@ -176,8 +179,9 @@ export function Compressor() {
     const fileIndex = files.findIndex(f => f.id === fileId);
     if(fileIndex === -1) return;
 
-    const fileToCompress = files[fileIndex];
     setFiles(prev => prev.map(f => f.id === fileId ? {...f, status: 'compressing', progress: 25} : f));
+    
+    const fileToCompress = files[fileIndex];
 
     try {
         let compressedBlob: Blob;
@@ -187,19 +191,26 @@ export function Compressor() {
             setFiles(prev => prev.map(f => f.id === fileId ? {...f, progress: 75} : f));
         } else {
              toast({
-                title: 'Unsupported File Type',
-                description: "This compressor is currently optimized for images. Other file types won't be compressed.",
+                title: 'Unsupported File Type for Compression',
+                description: `Client-side compression is only available for images. '${fileToCompress.file.name}' was not compressed.`,
                 variant: 'destructive'
             });
+            // For non-image files, we just use the original blob
             compressedBlob = fileToCompress.file;
         }
         
         if (compressedBlob.size >= fileToCompress.originalSize) {
              toast({
                 title: 'Compression Notice',
-                description: `Could not reduce file size for ${fileToCompress.file.name}. It might already be optimized.`,
+                description: `Could not reduce file size for ${fileToCompress.file.name}. It may already be optimized.`,
                 variant: 'default'
             })
+        }
+        
+        const currentFile = files.find(f => f.id === fileId);
+
+        if(currentFile?.compressedUrl) {
+            URL.revokeObjectURL(currentFile.compressedUrl);
         }
 
         const compressedUrl = URL.createObjectURL(compressedBlob);
@@ -220,7 +231,8 @@ export function Compressor() {
 
     } catch(e) {
         console.error(e);
-        toast({ title: 'Compression Failed', description: 'Something went wrong while compressing the file.', variant: 'destructive'});
+        const error = e as Error;
+        toast({ title: 'Compression Failed', description: error.message || 'Something went wrong while compressing the file.', variant: 'destructive'});
         setFiles(prev => prev.map(f => f.id === fileId ? {...f, status: 'error'} : f));
     }
   }
@@ -228,7 +240,7 @@ export function Compressor() {
   const compressAllFiles = async () => {
     const pendingFiles = files.filter(f => f.status === 'pending');
     if (pendingFiles.length === 0) {
-        toast({ title: 'No files to compress', description: 'All files have already been processed.', variant: 'destructive' });
+        toast({ title: 'No files to compress', description: 'All files have already been processed.', variant: 'default' });
         return;
     }
     
@@ -243,30 +255,48 @@ export function Compressor() {
     if (file && file.compressedUrl) {
         const link = document.createElement('a');
         link.href = file.compressedUrl;
-        link.setAttribute('download', `compressed-${file.file.name}`);
+        
+        const originalName = file.file.name;
+        const extensionIndex = originalName.lastIndexOf('.');
+        const nameWithoutExtension = extensionIndex > 0 ? originalName.substring(0, extensionIndex) : originalName;
+        
+        let newExtension = 'compressed';
+        if (file.compressedBlob?.type) {
+            newExtension = file.compressedBlob.type.split('/')[1];
+        }
+
+        link.setAttribute('download', `${nameWithoutExtension}-compressed.${newExtension}`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        toast({ title: `Downloading ${file.file.name}`});
+        toast({ title: `Downloading compressed ${file.file.name}`});
     }
   }
 
   const downloadAllAsZip = async () => {
     const doneFiles = files.filter(f => f.status === 'done' && f.compressedBlob);
     if (doneFiles.length === 0) {
-      toast({ title: 'No files to download', variant: 'destructive' });
+      toast({ title: 'No compressed files to download', variant: 'destructive' });
       return;
     }
 
     toast({ title: 'Preparing ZIP file for download...'});
 
-    // Use a dynamic import for JSZip to keep the initial bundle small
     const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
 
     doneFiles.forEach(f => {
       if (f.compressedBlob) {
-        zip.file(`compressed-${f.file.name}`, f.compressedBlob);
+        const originalName = f.file.name;
+        const extensionIndex = originalName.lastIndexOf('.');
+        const nameWithoutExtension = extensionIndex > 0 ? originalName.substring(0, extensionIndex) : originalName;
+        
+        let newExtension = 'compressed';
+        if (f.compressedBlob?.type) {
+            newExtension = f.compressedBlob.type.split('/')[1];
+        }
+
+        zip.file(`${nameWithoutExtension}-compressed.${newExtension}`, f.compressedBlob);
       }
     });
 
@@ -324,10 +354,10 @@ export function Compressor() {
         if (f.compressedUrl) URL.revokeObjectURL(f.compressedUrl);
       });
     };
-  }, [files]);
+  }, []); // Changed dependency to empty to only run on unmount
   
   const totalOriginalSize = files.reduce((acc, f) => acc + f.originalSize, 0);
-  const totalCompressedSize = files.reduce((acc, f) => acc + (f.status === 'done' && f.compressedSize ? f.compressedSize : f.originalSize), 0);
+  const totalCompressedSize = files.reduce((acc, f) => acc + (f.compressedSize ?? f.originalSize), 0);
   const allDone = files.length > 0 && files.every(f => f.status === 'done' || f.status === 'error');
 
   return (
@@ -359,6 +389,7 @@ export function Compressor() {
                 id="file-upload"
                 className="hidden"
                 multiple
+                accept="image/*"
                 onChange={(e) => handleFileUpload(e.target.files)}
               />
               <label
@@ -377,14 +408,14 @@ export function Compressor() {
                   <p className="mb-1 text-md font-semibold text-foreground">
                     <span className="text-primary">Click to upload</span> or drag and drop
                   </p>
-                  <p className="text-xs text-muted-foreground">Any file format supported</p>
+                  <p className="text-xs text-muted-foreground">Image files supported</p>
                 </div>
               </label>
 
               <h3 className="text-lg font-semibold text-center">Compression Mode</h3>
               <div className="grid grid-cols-1 gap-2">
                   <Button variant={compressionMode === 'lossless' ? 'default' : 'outline'} onClick={() => changeCompressionMode('lossless')} className="justify-start h-auto py-3">
-                    <Gem className="mr-3"/> <div><p>Lossless Compression</p><p className="text-xs text-muted-foreground font-normal">No quality loss.</p></div>
+                    <Gem className="mr-3"/> <div><p>Lossless Compression</p><p className="text-xs text-muted-foreground font-normal">No quality loss (PNG only).</p></div>
                   </Button>
                   <Button variant={compressionMode === 'quality' ? 'default' : 'outline'} onClick={() => changeCompressionMode('quality')} className="justify-start h-auto py-3">
                     <Sparkles className="mr-3"/> <div><p>High-Quality</p><p className="text-xs text-muted-foreground font-normal">Minimal quality loss.</p></div>
@@ -541,7 +572,7 @@ export function Compressor() {
                 <div className="text-center p-4 bg-green-500/10 rounded-lg">
                     <h4 className="font-bold text-green-700">Size Reduction</h4>
                     <p className="text-2xl text-green-600 font-bold">
-                        { previewFile.originalSize > 0 ? (100 - (previewFile.compressedSize!/previewFile.originalSize)*100).toFixed(0) : 0 }%
+                        { previewFile.originalSize > 0 && previewFile.compressedSize ? (100 - (previewFile.compressedSize/previewFile.originalSize)*100).toFixed(0) : 0 }%
                     </p>
                 </div>
             </div>
@@ -552,5 +583,3 @@ export function Compressor() {
     </>
   );
 }
-
-    
