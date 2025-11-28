@@ -4,6 +4,6 @@
 'use strict';
 
 import { ai } from '@/ai/genkit';
-import { nextHandler } from '@genkit-ai/next';
+import nextHandler from '@genkit-ai/next';
 
 export const POST = nextHandler({ ai });
