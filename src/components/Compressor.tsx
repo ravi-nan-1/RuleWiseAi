@@ -87,7 +87,7 @@ export function Compressor() {
   const [isCompressing, setIsCompressing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [compressionMode, setCompressionMode] = useState<'lossless' | 'quality' | 'max' | 'advanced'>('quality');
-  const [advancedOptions, setAdvancedOptions] = useState({ size: 20, unit: 'KB' });
+  const [advancedOptions, setAdvancedOptions] = useState({ size: 2, unit: 'MB' });
   const [currentLanguage, setCurrentLanguage] = useState('en');
   const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
   const { toast } = useToast();
@@ -146,7 +146,15 @@ export function Compressor() {
         const result = await compressFile(input);
 
         if (!result) {
-          throw new Error('Compression API failed');
+          throw new Error('Compression API did not return a result.');
+        }
+        
+        if (result.message) {
+            toast({
+                title: 'Compression Notice',
+                description: result.message,
+                variant: 'default'
+            })
         }
 
         setFiles(prev => prev.map(f => f.id === fileId ? {...f, progress: 75} : f));
@@ -259,8 +267,8 @@ export function Compressor() {
   }, []); // Remove files from dependencies to avoid revoking URLs on every state change
   
   const totalOriginalSize = files.reduce((acc, f) => acc + f.originalSize, 0);
-  const totalCompressedSize = files.reduce((acc, f) => acc + (f.compressedSize ?? 0), 0);
-  const allDone = files.length > 0 && files.every(f => f.status === 'done');
+  const totalCompressedSize = files.reduce((acc, f) => acc + (f.status === 'done' ? f.compressedSize! : f.originalSize), 0);
+  const allDone = files.length > 0 && files.every(f => f.status === 'done' || f.status === 'error');
 
   return (
     <>

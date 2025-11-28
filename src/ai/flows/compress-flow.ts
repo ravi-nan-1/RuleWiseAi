@@ -28,6 +28,8 @@ const CompressInputSchema = z.object({
 const CompressOutputSchema = z.object({
   compressedContent: z.string(), // base64 encoded
   compressedSize: z.number(),
+  originalSize: z.number(),
+  message: z.string().optional(),
 });
 
 export type CompressFileInput = z.infer<typeof CompressInputSchema>;
@@ -47,43 +49,57 @@ export const compressFileFlow = ai.defineFlow(
   },
   async (input) => {
     const buffer = Buffer.from(input.fileContent, 'base64');
-    let compressedBuffer: Buffer;
+    const originalSize = buffer.length;
+    let compressedBuffer: Buffer | null = null;
+    let message: string | undefined = undefined;
 
     try {
       let compressionLevel: number;
+      const targetSize = input.advancedOptions ? input.advancedOptions.size * (input.advancedOptions.unit === 'MB' ? 1024 * 1024 : 1024) : 0;
 
       switch (input.compressionMode) {
         case 'lossless':
-          compressionLevel = zlib.constants.Z_BEST_SPEED; // Good for speed, less compression
+          compressionLevel = zlib.constants.Z_BEST_SPEED;
           break;
         case 'quality':
-          compressionLevel = zlib.constants.Z_DEFAULT_COMPRESSION; // Balanced
+          compressionLevel = zlib.constants.Z_DEFAULT_COMPRESSION;
           break;
         case 'max':
-          compressionLevel = zlib.constants.Z_BEST_COMPRESSION; // Max compression
-          break;
-        case 'advanced':
-          // For 'advanced' mode, a true implementation would need an iterative process
-          // to meet the target size, which is complex. For this example, we'll use
-          // maximum compression as a stand-in.
           compressionLevel = zlib.constants.Z_BEST_COMPRESSION;
           break;
+        case 'advanced':
+           // Use max compression for advanced, then check if target is met.
+           compressionLevel = zlib.constants.Z_BEST_COMPRESSION;
+           break;
         default:
           compressionLevel = zlib.constants.Z_DEFAULT_COMPRESSION;
       }
-
+      
       compressedBuffer = await gzip(buffer, { level: compressionLevel });
+
+      if (input.compressionMode === 'advanced' && compressedBuffer.length > targetSize) {
+        // If advanced mode fails to meet the target, revert and send a message.
+        message = `Could not compress file to under ${input.advancedOptions!.size} ${input.advancedOptions!.unit}. Best effort size: ${compressedBuffer.length} bytes.`;
+        compressedBuffer = null; // Revert to original
+      } else if (compressedBuffer.length >= originalSize) {
+        // If compression doesn't help, revert and send a message.
+        message = "Compression did not reduce file size. Original file retained.";
+        compressedBuffer = null;
+      }
 
     } catch (error) {
       console.error('Compression failed:', error);
-      // If compression fails for any reason, we will return the original, uncompressed content
-      // to avoid breaking the user's flow.
-      compressedBuffer = buffer;
+      message = "An error occurred during compression. Original file retained.";
+      compressedBuffer = null;
     }
 
+    const finalBuffer = compressedBuffer || buffer;
+
     return {
-      compressedContent: compressedBuffer.toString('base64'),
-      compressedSize: compressedBuffer.length,
+      compressedContent: finalBuffer.toString('base64'),
+      compressedSize: finalBuffer.length,
+      originalSize: originalSize,
+      message: message,
     };
   }
 );
