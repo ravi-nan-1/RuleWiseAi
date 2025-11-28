@@ -3,7 +3,7 @@
  */
 'use strict';
 
-import { genkit, type Action } from 'genkit';
+import { genkit } from 'genkit';
 import { googleAI } from '@genkit-ai/google-genai';
 
 // Import flows
@@ -14,7 +14,7 @@ export const ai = genkit({
   plugins: [
     googleAI(),
   ],
-  flows: [compressFileFlow as Action<any, any>],
+  flows: [compressFileFlow],
   logLevel: 'debug',
   enableTracingAndMetrics: true,
 });
