@@ -1,4 +1,5 @@
 
+'use client';
 import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -42,6 +43,7 @@ import {
 } from './ui/dropdown-menu';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { compressFile, type CompressFileInput } from '@/ai/flows/compress-flow';
 
 type UploadedFile = {
   id: string;
@@ -133,30 +135,24 @@ export function Compressor() {
         
         setFiles(prev => prev.map(f => f.id === fileId ? {...f, progress: 50} : f));
 
-        const response = await fetch('/api/genkit/compressFileFlow', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            input: {
-              fileContent: base64Content,
-              fileName: fileToCompress.file.name,
-              compressionMode,
-              advancedOptions: compressionMode === 'advanced' ? advancedOptions : undefined,
-            }
-          }),
-        });
+        const input: CompressFileInput = {
+          fileContent: base64Content,
+          fileName: fileToCompress.file.name,
+          compressionMode,
+          advancedOptions:
+            compressionMode === 'advanced' ? advancedOptions : undefined,
+        };
 
-        if (!response.ok) {
+        const result = await compressFile(input);
+
+        if (!result) {
           throw new Error('Compression API failed');
         }
 
         setFiles(prev => prev.map(f => f.id === fileId ? {...f, progress: 75} : f));
 
-        const result = await response.json();
-        const compressedContent = result.output.compressedContent;
-        const compressedSize = result.output.compressedSize;
+        const compressedContent = result.compressedContent;
+        const compressedSize = result.compressedSize;
 
         const compressedBlob = await (await fetch(`data:${fileToCompress.file.type};base64,${compressedContent}`)).blob();
         const compressedUrl = URL.createObjectURL(compressedBlob);

@@ -7,8 +7,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
-import { Action, defineFlow } from 'genkit';
+import { z } from 'zod';
 import zlib from 'zlib';
 import { promisify } from 'util';
 
@@ -18,10 +17,12 @@ const CompressInputSchema = z.object({
   fileContent: z.string(),
   fileName: z.string(),
   compressionMode: z.enum(['lossless', 'quality', 'max', 'advanced']),
-  advancedOptions: z.object({
-    size: z.number(),
-    unit: z.enum(['KB', 'MB']),
-  }).optional(),
+  advancedOptions: z
+    .object({
+      size: z.number(),
+      unit: z.enum(['KB', 'MB']),
+    })
+    .optional(),
 });
 
 const CompressOutputSchema = z.object({
@@ -29,7 +30,10 @@ const CompressOutputSchema = z.object({
   compressedSize: z.number(),
 });
 
-export const compressFileFlow = defineFlow(
+export type CompressFileInput = z.infer<typeof CompressInputSchema>;
+export type CompressFileOutput = z.infer<typeof CompressOutputSchema>;
+
+export const compressFileFlow = ai.defineFlow(
   {
     name: 'compressFileFlow',
     inputSchema: CompressInputSchema,
@@ -37,32 +41,35 @@ export const compressFileFlow = defineFlow(
   },
   async (input) => {
     const buffer = Buffer.from(input.fileContent, 'base64');
-    
+
     // NOTE: This is a very basic simulation for demonstration.
     // Real-world implementation would require different libraries for different file types.
     // For now, we'll use gzip for a simple text-based compression example.
 
     let compressedBuffer: Buffer;
-    
+
     try {
       // We will use gzip as a simple, universal compression example.
       // More advanced logic would be needed here for specific file types and modes.
-      const compressionLevel = input.compressionMode === 'max' ? zlib.constants.Z_BEST_COMPRESSION : zlib.constants.Z_DEFAULT_COMPRESSION;
+      const compressionLevel =
+        input.compressionMode === 'max'
+          ? zlib.constants.Z_BEST_COMPRESSION
+          : zlib.constants.Z_DEFAULT_COMPRESSION;
       compressedBuffer = await gzip(buffer, { level: compressionLevel });
 
       // For 'advanced' mode, we'd need a more complex, iterative process
       // to meet the target size, which is beyond this basic example.
       // For now, we just use the 'max' compression.
       if (input.compressionMode === 'advanced') {
-         compressedBuffer = await gzip(buffer, { level: zlib.constants.Z_BEST_COMPRESSION });
+        compressedBuffer = await gzip(buffer, {
+          level: zlib.constants.Z_BEST_COMPRESSION,
+        });
       }
-
     } catch (error) {
       console.error('Compression failed:', error);
       // If compression fails, return original content
       compressedBuffer = buffer;
     }
-
 
     return {
       compressedContent: compressedBuffer.toString('base64'),
@@ -70,3 +77,9 @@ export const compressFileFlow = defineFlow(
     };
   }
 );
+
+export async function compressFile(
+  input: CompressFileInput
+): Promise<CompressFileOutput> {
+  return compressFileFlow(input);
+}
