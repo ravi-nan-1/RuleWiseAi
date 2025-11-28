@@ -10,7 +10,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
 import { 
   FileUp, 
   Loader2, 
@@ -44,6 +43,7 @@ import {
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { compressFile, type CompressFileInput } from '@/ai/flows/compress-flow';
+import { compressImage, type CompressImageInput } from '@/ai/flows/image-compress-flow';
 
 type UploadedFile = {
   id: string;
@@ -131,19 +131,31 @@ export function Compressor() {
       const reader = new FileReader();
       reader.readAsDataURL(fileToCompress.file);
       reader.onload = async (event) => {
-        const base64Content = (event.target?.result as string).split(',')[1];
+        const dataUrl = event.target?.result as string;
+        const base64Content = dataUrl.split(',')[1];
         
         setFiles(prev => prev.map(f => f.id === fileId ? {...f, progress: 50} : f));
 
-        const input: CompressFileInput = {
-          fileContent: base64Content,
-          fileName: fileToCompress.file.name,
-          compressionMode,
-          advancedOptions:
-            compressionMode === 'advanced' ? advancedOptions : undefined,
-        };
+        let result;
 
-        const result = await compressFile(input);
+        if (fileToCompress.file.type.startsWith('image/')) {
+          const input: CompressImageInput = {
+            imageDataUri: dataUrl,
+            compressionMode,
+            advancedOptions:
+              compressionMode === 'advanced' ? advancedOptions : undefined,
+          };
+          result = await compressImage(input);
+        } else {
+          const input: CompressFileInput = {
+            fileContent: base64Content,
+            fileName: fileToCompress.file.name,
+            compressionMode,
+            advancedOptions:
+              compressionMode === 'advanced' ? advancedOptions : undefined,
+          };
+          result = await compressFile(input);
+        }
 
         if (!result) {
           throw new Error('Compression API did not return a result.');
@@ -258,13 +270,11 @@ export function Compressor() {
   useEffect(() => {
     return () => {
       files.forEach(f => {
-        URL.revokeObjectURL(f.originalUrl);
-        if (f.compressedUrl) {
-          URL.revokeObjectURL(f.compressedUrl);
-        }
+        if (f.originalUrl) URL.revokeObjectURL(f.originalUrl);
+        if (f.compressedUrl) URL.revokeObjectURL(f.compressedUrl);
       });
     };
-  }, []); // Remove files from dependencies to avoid revoking URLs on every state change
+  }, [files]);
   
   const totalOriginalSize = files.reduce((acc, f) => acc + f.originalSize, 0);
   const totalCompressedSize = files.reduce((acc, f) => acc + (f.status === 'done' ? f.compressedSize! : f.originalSize), 0);

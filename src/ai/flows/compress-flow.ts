@@ -1,6 +1,6 @@
 'use server';
 /**
- * @fileOverview A Genkit flow for compressing files.
+ * @fileOverview A Genkit flow for compressing generic files using zlib.
  *
  * This file contains the server-side logic for file compression.
  * - compressFile - A function that takes file content as a string and returns a compressed version.
@@ -12,9 +12,10 @@ import zlib from 'zlib';
 import { promisify } from 'util';
 
 const gzip = promisify(zlib.gzip);
+const gunzip = promisify(zlib.unzip);
 
 const CompressInputSchema = z.object({
-  fileContent: z.string(),
+  fileContent: z.string(), // base64 encoded
   fileName: z.string(),
   compressionMode: z.enum(['lossless', 'quality', 'max', 'advanced']),
   advancedOptions: z
@@ -41,7 +42,7 @@ export async function compressFile(
   return compressFileFlow(input);
 }
 
-export const compressFileFlow = ai.defineFlow(
+const compressFileFlow = ai.defineFlow(
   {
     name: 'compressFileFlow',
     inputSchema: CompressInputSchema,
@@ -68,7 +69,6 @@ export const compressFileFlow = ai.defineFlow(
           compressionLevel = zlib.constants.Z_BEST_COMPRESSION;
           break;
         case 'advanced':
-           // Use max compression for advanced, then check if target is met.
            compressionLevel = zlib.constants.Z_BEST_COMPRESSION;
            break;
         default:
@@ -77,13 +77,11 @@ export const compressFileFlow = ai.defineFlow(
       
       compressedBuffer = await gzip(buffer, { level: compressionLevel });
 
-      if (input.compressionMode === 'advanced' && compressedBuffer.length > targetSize) {
-        // If advanced mode fails to meet the target, revert and send a message.
-        message = `Could not compress file to under ${input.advancedOptions!.size} ${input.advancedOptions!.unit}. Best effort size: ${compressedBuffer.length} bytes.`;
-        compressedBuffer = null; // Revert to original
+      if (input.compressionMode === 'advanced' && targetSize > 0 && compressedBuffer.length > targetSize) {
+        message = `Could not compress file to under ${input.advancedOptions!.size} ${input.advancedOptions!.unit}. Best effort size: ${formatBytes(compressedBuffer.length)}.`;
+        compressedBuffer = null; 
       } else if (compressedBuffer.length >= originalSize) {
-        // If compression doesn't help, revert and send a message.
-        message = "Compression did not reduce file size. Original file retained.";
+        message = "Compression did not reduce file size for this file type. Original file retained.";
         compressedBuffer = null;
       }
 
@@ -103,3 +101,12 @@ export const compressFileFlow = ai.defineFlow(
     };
   }
 );
+
+function formatBytes(bytes: number, decimals = 2) {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
