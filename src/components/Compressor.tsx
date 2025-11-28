@@ -43,7 +43,6 @@ import {
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { compressFile, type CompressFileInput } from '@/ai/flows/compress-flow';
-import { compressImage, type CompressImageInput } from '@/ai/flows/image-compress-flow';
 
 type UploadedFile = {
   id: string;
@@ -136,30 +135,14 @@ export function Compressor() {
         
         setFiles(prev => prev.map(f => f.id === fileId ? {...f, progress: 50} : f));
 
-        let result;
-
-        if (fileToCompress.file.type.startsWith('image/')) {
-          const input: CompressImageInput = {
-            imageDataUri: dataUrl,
-            compressionMode,
-            advancedOptions:
-              compressionMode === 'advanced' ? advancedOptions : undefined,
-          };
-          result = await compressImage(input);
-        } else {
-          const input: CompressFileInput = {
+        const input: CompressFileInput = {
             fileContent: base64Content,
             fileName: fileToCompress.file.name,
             compressionMode,
             advancedOptions:
               compressionMode === 'advanced' ? advancedOptions : undefined,
-          };
-          result = await compressFile(input);
-        }
-
-        if (!result) {
-          throw new Error('Compression API did not return a result.');
-        }
+        };
+        const result = await compressFile(input);
         
         if (result.message) {
             toast({
@@ -277,7 +260,7 @@ export function Compressor() {
   }, [files]);
   
   const totalOriginalSize = files.reduce((acc, f) => acc + f.originalSize, 0);
-  const totalCompressedSize = files.reduce((acc, f) => acc + (f.status === 'done' ? f.compressedSize! : f.originalSize), 0);
+  const totalCompressedSize = files.reduce((acc, f) => acc + (f.status === 'done' && f.compressedSize ? f.compressedSize : f.originalSize), 0);
   const allDone = files.length > 0 && files.every(f => f.status === 'done' || f.status === 'error');
 
   return (
@@ -411,7 +394,7 @@ export function Compressor() {
                                     {f.status === 'compressing' && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
                                     {f.status === 'done' && (
                                         <>
-                                            {f.file.type.startsWith('image/') && <Button size="sm" variant="outline" onClick={() => setPreviewFile(f)}><Eye className="h-4 w-4 mr-2"/> Preview</Button>}
+                                            {f.file.type.startsWith('image/') && f.compressedUrl && <Button size="sm" variant="outline" onClick={() => setPreviewFile(f)}><Eye className="h-4 w-4 mr-2"/> Preview</Button>}
                                             <Button size="sm" onClick={() => downloadCompressedFile(f.id)}><Download className="h-4 w-4 mr-2"/> Download</Button>
                                         </>
                                     )}
@@ -422,7 +405,7 @@ export function Compressor() {
                         </div>
                     </div>
                     <div className="mt-auto pt-4 border-t">
-                      {allDone && totalCompressedSize > 0 && (
+                      {allDone && totalCompressedSize > 0 && files.length > 0 && (
                           <div className="text-center mb-4 p-4 bg-green-500/10 rounded-lg">
                               <h4 className="font-bold text-green-700">Compression Complete!</h4>
                               <p className="text-sm text-green-600">

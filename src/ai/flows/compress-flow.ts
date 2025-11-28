@@ -12,7 +12,6 @@ import zlib from 'zlib';
 import { promisify } from 'util';
 
 const gzip = promisify(zlib.gzip);
-const gunzip = promisify(zlib.unzip);
 
 const CompressInputSchema = z.object({
   fileContent: z.string(), // base64 encoded
@@ -79,6 +78,7 @@ const compressFileFlow = ai.defineFlow(
 
       if (input.compressionMode === 'advanced' && targetSize > 0 && compressedBuffer.length > targetSize) {
         message = `Could not compress file to under ${input.advancedOptions!.size} ${input.advancedOptions!.unit}. Best effort size: ${formatBytes(compressedBuffer.length)}.`;
+        // In this case, we don't return the compressed buffer as it failed to meet the criteria
         compressedBuffer = null; 
       } else if (compressedBuffer.length >= originalSize) {
         message = "Compression did not reduce file size for this file type. Original file retained.";
