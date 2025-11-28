@@ -33,6 +33,12 @@ const CompressOutputSchema = z.object({
 export type CompressFileInput = z.infer<typeof CompressInputSchema>;
 export type CompressFileOutput = z.infer<typeof CompressOutputSchema>;
 
+export async function compressFile(
+  input: CompressFileInput
+): Promise<CompressFileOutput> {
+  return compressFileFlow(input);
+}
+
 export const compressFileFlow = ai.defineFlow(
   {
     name: 'compressFileFlow',
@@ -77,9 +83,3 @@ export const compressFileFlow = ai.defineFlow(
     };
   }
 );
-
-export async function compressFile(
-  input: CompressFileInput
-): Promise<CompressFileOutput> {
-  return compressFileFlow(input);
-}

@@ -5,14 +5,15 @@
 
 import { genkit } from 'genkit';
 import { googleAI } from '@genkit-ai/google-genai';
-import { compressFileFlow } from './flows/compress-flow';
 
 // Your Genkit project's configuration
 export const ai = genkit({
   plugins: [
     googleAI(),
   ],
-  flows: [compressFileFlow],
+  // Flows are now auto-registered from their definition files.
+  // No need to list them here.
+  flows: [],
   logLevel: 'debug',
   enableTracingAndMetrics: true,
 });
