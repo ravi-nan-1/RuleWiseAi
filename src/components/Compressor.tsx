@@ -133,20 +133,21 @@ export function Compressor() {
                 if (newProgress >= 100) {
                     clearInterval(interval);
                     
-                    let reductionFactor = Math.random() * 0.5 + 0.2; // Default 50-80% reduction
-                    if (compressionMode === 'lossless') reductionFactor = Math.random() * 0.2 + 0.1; // 10-30%
-                    if (compressionMode === 'max') reductionFactor = Math.random() * 0.3 + 0.6; // 60-90%
+                    let compressedSize = 0;
                     if (compressionMode === 'advanced') {
                         const targetBytes = advancedOptions.unit === 'KB' ? advancedOptions.size * 1024 : advancedOptions.size * 1024 * 1024;
                         if (targetBytes < f.originalSize) {
-                          reductionFactor = targetBytes / f.originalSize;
+                          compressedSize = targetBytes;
                         } else {
                           // Target is larger than original, do minimal compression
-                          reductionFactor = 0.9;
+                          compressedSize = f.originalSize * 0.9;
                         }
+                    } else {
+                      let reductionFactor = Math.random() * 0.5 + 0.2; // Default 50-80% reduction
+                      if (compressionMode === 'lossless') reductionFactor = Math.random() * 0.2 + 0.1; // 10-30%
+                      if (compressionMode === 'max') reductionFactor = Math.random() * 0.3 + 0.6; // 60-90%
+                      compressedSize = f.originalSize * (1 - reductionFactor);
                     }
-
-                    const compressedSize = f.originalSize * (1 - reductionFactor);
                     
                     // In a real app, the compressed file blob would come from the backend/worker
                     const compressedBlob = new Blob([f.file], { type: f.file.type });
