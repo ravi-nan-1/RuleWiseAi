@@ -42,7 +42,6 @@ import {
 } from './ui/dropdown-menu';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { compressFile, type CompressFileInput } from '@/ai/flows/compress-flow';
 
 type UploadedFile = {
   id: string;
@@ -53,6 +52,7 @@ type UploadedFile = {
   status: 'pending' | 'compressing' | 'done' | 'error';
   originalUrl: string;
   compressedUrl: string | null;
+  compressedBlob: Blob | null;
 };
 
 const languages = [
@@ -80,13 +80,65 @@ const formatBytes = (bytes: number, decimals = 2) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
+const compressImageClientSide = (file: File, mode: 'lossless' | 'quality' | 'max' | 'advanced', advancedOptions: { size: number, unit: 'KB' | 'MB' }): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = event => {
+      const img = document.createElement('img');
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Could not get canvas context'));
+
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+
+        let quality: number;
+        switch(mode) {
+          case 'lossless':
+            quality = 0.95; // Near lossless
+            break;
+          case 'max':
+            quality = 0.6; // Max compression
+            break;
+          case 'advanced':
+            // This is a simplification. True target size requires iteration.
+            const targetBytes = advancedOptions.size * (advancedOptions.unit === 'MB' ? 1024 * 1024 : 1024);
+            quality = Math.max(0.5, Math.min(0.95, 1 - (file.size - targetBytes) / file.size));
+            break;
+          case 'quality':
+          default:
+            quality = 0.8; // Good quality
+            break;
+        }
+
+        canvas.toBlob(blob => {
+          if (!blob) return reject(new Error('Canvas toBlob failed'));
+          
+          if (blob.size > file.size) {
+            // If compression made it bigger, return original
+            resolve(file);
+          } else {
+            resolve(blob);
+          }
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = reject;
+    };
+    reader.onerror = reject;
+  });
+};
+
 
 export function Compressor() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isCompressing, setIsCompressing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [compressionMode, setCompressionMode] = useState<'lossless' | 'quality' | 'max' | 'advanced'>('quality');
-  const [advancedOptions, setAdvancedOptions] = useState({ size: 2, unit: 'MB' });
+  const [advancedOptions, setAdvancedOptions] = useState({ size: 2, unit: 'MB' as 'KB' | 'MB' });
   const [currentLanguage, setCurrentLanguage] = useState('en');
   const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
   const { toast } = useToast();
@@ -103,6 +155,7 @@ export function Compressor() {
       status: 'pending',
       originalUrl: URL.createObjectURL(file),
       compressedUrl: null,
+      compressedBlob: null,
     }));
     
     setFiles(prev => [...prev, ...newFiles]);
@@ -127,37 +180,28 @@ export function Compressor() {
     setFiles(prev => prev.map(f => f.id === fileId ? {...f, status: 'compressing', progress: 25} : f));
 
     try {
-      const reader = new FileReader();
-      reader.readAsDataURL(fileToCompress.file);
-      reader.onload = async (event) => {
-        const dataUrl = event.target?.result as string;
-        const base64Content = dataUrl.split(',')[1];
+        let compressedBlob: Blob;
+        if (fileToCompress.file.type.startsWith('image/')) {
+            setFiles(prev => prev.map(f => f.id === fileId ? {...f, progress: 50} : f));
+            compressedBlob = await compressImageClientSide(fileToCompress.file, compressionMode, advancedOptions);
+            setFiles(prev => prev.map(f => f.id === fileId ? {...f, progress: 75} : f));
+        } else {
+             toast({
+                title: 'Unsupported File Type',
+                description: "This compressor is currently optimized for images. Other file types won't be compressed.",
+                variant: 'destructive'
+            });
+            compressedBlob = fileToCompress.file;
+        }
         
-        setFiles(prev => prev.map(f => f.id === fileId ? {...f, progress: 50} : f));
-
-        const input: CompressFileInput = {
-            fileContent: base64Content,
-            fileName: fileToCompress.file.name,
-            compressionMode,
-            advancedOptions:
-              compressionMode === 'advanced' ? advancedOptions : undefined,
-        };
-        const result = await compressFile(input);
-        
-        if (result.message) {
-            toast({
+        if (compressedBlob.size >= fileToCompress.originalSize) {
+             toast({
                 title: 'Compression Notice',
-                description: result.message,
+                description: `Could not reduce file size for ${fileToCompress.file.name}. It might already be optimized.`,
                 variant: 'default'
             })
         }
 
-        setFiles(prev => prev.map(f => f.id === fileId ? {...f, progress: 75} : f));
-
-        const compressedContent = result.compressedContent;
-        const compressedSize = result.compressedSize;
-
-        const compressedBlob = await (await fetch(`data:${fileToCompress.file.type};base64,${compressedContent}`)).blob();
         const compressedUrl = URL.createObjectURL(compressedBlob);
 
         setFiles(prev => prev.map(f => {
@@ -166,16 +210,14 @@ export function Compressor() {
                     ...f, 
                     progress: 100, 
                     status: 'done',
-                    compressedSize,
-                    compressedUrl,
+                    compressedSize: compressedBlob.size,
+                    compressedUrl: compressedUrl,
+                    compressedBlob: compressedBlob,
                 };
             }
             return f;
         }));
-      };
-      reader.onerror = (error) => {
-        throw error;
-      };
+
     } catch(e) {
         console.error(e);
         toast({ title: 'Compression Failed', description: 'Something went wrong while compressing the file.', variant: 'destructive'});
@@ -209,9 +251,34 @@ export function Compressor() {
     }
   }
 
-  const downloadAllAsZip = () => {
-    toast({ title: `Downloading all files as a ZIP.`});
-    console.log("Downloading all as ZIP - functionality not implemented yet.");
+  const downloadAllAsZip = async () => {
+    const doneFiles = files.filter(f => f.status === 'done' && f.compressedBlob);
+    if (doneFiles.length === 0) {
+      toast({ title: 'No files to download', variant: 'destructive' });
+      return;
+    }
+
+    toast({ title: 'Preparing ZIP file for download...'});
+
+    // Use a dynamic import for JSZip to keep the initial bundle small
+    const JSZip = (await import('jszip')).default;
+    const zip = new JSZip();
+
+    doneFiles.forEach(f => {
+      if (f.compressedBlob) {
+        zip.file(`compressed-${f.file.name}`, f.compressedBlob);
+      }
+    });
+
+    zip.generateAsync({ type: 'blob' }).then(content => {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(content);
+      link.download = 'compressed-files.zip';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    });
   }
 
   const changeCompressionMode = (mode: 'lossless' | 'quality' | 'max' | 'advanced') => {
@@ -381,8 +448,11 @@ export function Compressor() {
                                             <>
                                                 <span className="mx-1">→</span>
                                                 {formatBytes(f.compressedSize)}
-                                                <span className="text-green-500 font-medium ml-2">
-                                                    (-{ (100 - (f.compressedSize/f.originalSize)*100).toFixed(0) }%)
+                                                <span className={cn(
+                                                    "font-medium ml-2",
+                                                    f.compressedSize < f.originalSize ? 'text-green-500' : 'text-yellow-500'
+                                                )}>
+                                                    (-{ f.originalSize > 0 ? (100 - (f.compressedSize/f.originalSize)*100).toFixed(0) : 0 }%)
                                                 </span>
                                             </>
                                         )}
@@ -410,7 +480,7 @@ export function Compressor() {
                               <h4 className="font-bold text-green-700">Compression Complete!</h4>
                               <p className="text-sm text-green-600">
                                   Total saved: <span className="font-semibold">{formatBytes(totalOriginalSize)}</span> → <span className="font-semibold">{formatBytes(totalCompressedSize)}</span>
-                                  <span className="ml-2 font-bold">({ (100 - (totalCompressedSize/totalOriginalSize)*100).toFixed(0) }%)</span>
+                                  <span className="ml-2 font-bold">({ totalOriginalSize > 0 ? (100 - (totalCompressedSize/totalOriginalSize)*100).toFixed(0) : 0 }%)</span>
                               </p>
                           </div>
                       )}
@@ -471,7 +541,7 @@ export function Compressor() {
                 <div className="text-center p-4 bg-green-500/10 rounded-lg">
                     <h4 className="font-bold text-green-700">Size Reduction</h4>
                     <p className="text-2xl text-green-600 font-bold">
-                        { (100 - (previewFile.compressedSize!/previewFile.originalSize)*100).toFixed(0) }%
+                        { previewFile.originalSize > 0 ? (100 - (previewFile.compressedSize!/previewFile.originalSize)*100).toFixed(0) : 0 }%
                     </p>
                 </div>
             </div>
@@ -482,3 +552,5 @@ export function Compressor() {
     </>
   );
 }
+
+    
